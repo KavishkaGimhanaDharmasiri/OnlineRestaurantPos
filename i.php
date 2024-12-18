@@ -131,8 +131,9 @@
             const balance = cash - totalAmount;
             document.getElementById("balance").textContent = "Rs:" + balance.toFixed(2);
         }
+        document.getElementById("processButton").addEventListener("click", processInvoice);
 
-        function processInvoice() {
+function processInvoice() {
     const tableBody = document.getElementById("productTable");
     const rows = Array.from(tableBody.rows);
     const invoiceData = rows.map(row => ({
@@ -150,80 +151,31 @@
         return;
     }
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [210, 297], // A4 size in mm
-        putOnlyUsedFonts: true,
-        floatPrecision: 16 // or "smart"
-    });
-
-    // Set margins for 78mm width
-    const marginX = (210 - 78) / 2; // Center the 78mm width on A4
-    const headerY = 20;
-    const footerY = 270;
-
-    // Header
-    doc.setFontSize(18);
-    doc.text("Katagasma Hanwella", marginX, headerY);
-
-    // Invoice details
-    doc.setFontSize(12);
-    doc.text(`Bill No: ${billNo}`, marginX, headerY + 10);
-    doc.text("Product", marginX, headerY + 20);
-    doc.text("Price", marginX + 60, headerY + 20); // Adjust for price column
-
-    let y = headerY + 30;
-    invoiceData.forEach(item => {
-        doc.text(item.name, marginX, y);
-        doc.text(`Rs: ${item.price.toFixed(2)}`, marginX + 60, y);
-        y += 10;
-    });
-
-    doc.text(`Total Amount: Rs: ${totalAmount.toFixed(2)}`, marginX, y);
-    doc.text(`Cash Amount: Rs: ${cash.toFixed(2)}`, marginX, y + 10);
-    doc.text(`Balance: Rs: ${balance.toFixed(2)}`, marginX, y + 20);
-
-    // Footer
-    doc.setFontSize(10);
-    doc.text("Software by Chox Trading 0771168439", marginX, footerY);
-
-    // Save the PDF to a Blob and open it for printing
-    const pdfBlob = doc.output('blob');
-
-    const pdfUrl = URL.createObjectURL(pdfBlob);
-    const printWindow = window.open(pdfUrl);
-
-    // Wait for the window to load the PDF, then print and reload the main page
-    printWindow.onload = function() {
-        printWindow.print();
-        printWindow.onafterprint = function() {
-            location.reload(); // Reload the main page after printing
-        };
-        printWindow.close();
-    };
-
     // AJAX call to process the invoice
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "insert_invoice2.php", true);
     xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
     xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            console.log(xhr.responseText);
-            tableBody.innerHTML = '';
-            totalAmount = 0;
-            document.getElementById("totalAmount").textContent = "Rs:0.00";
-            document.getElementById("cash").value = '';
-            document.getElementById("balance").textContent = "Rs:0.00";
-            alert("Invoice processed successfully!");
+        if (xhr.readyState === 4) {
+            console.log('Response Status: ' + xhr.status); // Check status code
+            console.log('Response Text: ' + xhr.responseText); // Check the response text
+            if (xhr.status === 200) {
+                console.log(xhr.responseText); // Log the response if successful
+                tableBody.innerHTML = '';
+                totalAmount = 0;
+                document.getElementById("totalAmount").textContent = "Rs:0.00";
+                document.getElementById("cash").value = '';
+                document.getElementById("balance").textContent = "Rs:0.00";
+                alert("Invoice processed successfully!");
+
+                // Redirect to the dashboard page after processing the invoice
+                window.location.replace("dashboard.php"); // Force redirection
+            } else {
+                alert('Error processing invoice');
+            }
         }
     };
     xhr.send(JSON.stringify({ billNo: billNo, items: invoiceData, totalAmount: totalAmount }));
-
-        // Redirect to generate PDF
-        const url = `generate_pdf.php?billNo=${billNo}&data=${encodeURIComponent(JSON.stringify(invoiceData))}&totalAmount=${totalAmount}&cash=${cash}&balance=${balance}`;
-    window.location.href = url;
 }
 
 

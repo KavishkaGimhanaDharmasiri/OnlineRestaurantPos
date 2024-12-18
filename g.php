@@ -6,9 +6,6 @@
     <title>Product List</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/snowfall/1.0.0/snowfall.min.js"></script>
-<div id="snowstorm"></div>
-
     <style>
         .product-card {
             transition: all 0.3s ease;
@@ -17,13 +14,6 @@
             transform: translateY(-5px);
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
-        @keyframes snowfall {
-  0% { transform: translateY(-100px); }
-  100% { transform: translateY(100vh); }
-}
-
-
-
     </style>
 </head>
 <body class="bg-gray-100 font-sans">
@@ -61,6 +51,7 @@
                     ?>
                 </div>
             </div>
+
             <div class="lg:w-1/3">
                 <div class="bg-white rounded-lg shadow-lg p-6">
                     <h2 class="text-2xl font-semibold mb-4">Invoice</h2>
@@ -133,96 +124,18 @@
         }
 
         function processInvoice() {
-    const tableBody = document.getElementById("productTable");
-    const rows = Array.from(tableBody.rows);
-    const invoiceData = rows.map(row => ({
+    const billNo = document.getElementById("billNo").textContent;
+    const invoiceData = Array.from(document.getElementById("productTable").rows).map(row => ({
         name: row.cells[0].textContent,
         price: parseFloat(row.cells[1].textContent.replace('Rs:', ''))
     }));
 
     const totalAmount = parseFloat(document.getElementById("totalAmount").textContent.replace('Rs:', ''));
     const cash = parseFloat(document.getElementById("cash").value) || 0;
-    const billNo = document.getElementById("billNo").textContent;
-
     const balance = cash - totalAmount;
-    if (balance < 0) {
-        alert("Check the entered amount: balance cannot be negative.");
-        return;
-    }
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [210, 297], // A4 size in mm
-        putOnlyUsedFonts: true,
-        floatPrecision: 16 // or "smart"
-    });
-
-    // Set margins for 78mm width
-    const marginX = (210 - 78) / 2; // Center the 78mm width on A4
-    const headerY = 20;
-    const footerY = 270;
-
-    // Header
-    doc.setFontSize(18);
-    doc.text("Katagasma Hanwella", marginX, headerY);
-
-    // Invoice details
-    doc.setFontSize(12);
-    doc.text(`Bill No: ${billNo}`, marginX, headerY + 10);
-    doc.text("Product", marginX, headerY + 20);
-    doc.text("Price", marginX + 60, headerY + 20); // Adjust for price column
-
-    let y = headerY + 30;
-    invoiceData.forEach(item => {
-        doc.text(item.name, marginX, y);
-        doc.text(`Rs: ${item.price.toFixed(2)}`, marginX + 60, y);
-        y += 10;
-    });
-
-    doc.text(`Total Amount: Rs: ${totalAmount.toFixed(2)}`, marginX, y);
-    doc.text(`Cash Amount: Rs: ${cash.toFixed(2)}`, marginX, y + 10);
-    doc.text(`Balance: Rs: ${balance.toFixed(2)}`, marginX, y + 20);
-
-    // Footer
-    doc.setFontSize(10);
-    doc.text("Software by Chox Trading 0771168439", marginX, footerY);
-
-    // Save the PDF to a Blob and open it for printing
-    const pdfBlob = doc.output('blob');
-
-    const pdfUrl = URL.createObjectURL(pdfBlob);
-    const printWindow = window.open(pdfUrl);
-
-    // Wait for the window to load the PDF, then print and reload the main page
-    printWindow.onload = function() {
-        printWindow.print();
-        printWindow.onafterprint = function() {
-            location.reload(); // Reload the main page after printing
-        };
-        printWindow.close();
-    };
-
-    // AJAX call to process the invoice
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "insert_invoice2.php", true);
-    xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            console.log(xhr.responseText);
-            tableBody.innerHTML = '';
-            totalAmount = 0;
-            document.getElementById("totalAmount").textContent = "Rs:0.00";
-            document.getElementById("cash").value = '';
-            document.getElementById("balance").textContent = "Rs:0.00";
-            alert("Invoice processed successfully!");
-        }
-    };
-    xhr.send(JSON.stringify({ billNo: billNo, items: invoiceData, totalAmount: totalAmount }));
-
-        // Redirect to generate PDF
-        const url = `generate_pdf.php?billNo=${billNo}&data=${encodeURIComponent(JSON.stringify(invoiceData))}&totalAmount=${totalAmount}&cash=${cash}&balance=${balance}`;
+    // Redirect to generate PDF
+    const url = `generate_pdf.php?billNo=${billNo}&data=${encodeURIComponent(JSON.stringify(invoiceData))}&totalAmount=${totalAmount}&cash=${cash}&balance=${balance}`;
     window.location.href = url;
 }
 

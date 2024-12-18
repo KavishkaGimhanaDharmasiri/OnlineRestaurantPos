@@ -56,7 +56,7 @@ $conn->close();
 <body>
     <h1>Invoice Summary for <?php echo htmlspecialchars($currentDate); ?></h1>
 
-    <h2>Total Amount: $<?php echo htmlspecialchars(number_format($totalAmount, 2)); ?></h2>
+    <h2>Total Amount: Rs:- <?php echo htmlspecialchars(number_format($totalAmount, 2)); ?></h2>
 
     <h3>Product Wise Total Amount</h3>
     <table>
@@ -72,7 +72,7 @@ $conn->close();
                 while ($row = $productWiseResult->fetch_assoc()) {
                     echo '<tr>';
                     echo '<td>' . htmlspecialchars($row['Items']) . '</td>';
-                    echo '<td>$' . htmlspecialchars(number_format($row['totalAmount'], 2)) . '</td>';
+                    echo '<td>Rs:-' . htmlspecialchars(number_format($row['totalAmount'], 2)) . '</td>';
                     echo '</tr>';
                 }
             } else {

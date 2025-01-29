@@ -5,7 +5,7 @@ class ModernInvoice extends \TCPDF {
     // Custom Header
     public function Header() {
         // Logo (replace with your actual logo path)
-        $logoPath = '/path/to/your/logo.png';
+        $logoPath = 'logo.png';
         if (file_exists($logoPath)) {
             $this->Image($logoPath, 15, 10, 40, '', 'PNG', '', 'T', false, 300, '', false, false, 0);
         }
@@ -108,6 +108,14 @@ if (isset($_GET['billNo']) && isset($_GET['data'])) {
 
     // Output the PDF
     $pdf->Output('invoice_' . $billNo . '.pdf', 'I');
+
+    // After the PDF is displayed, redirect to a page with JavaScript to show the alert
+    echo '<script>
+        window.onload = function() {
+            alert("Invoice generated successfully!");
+            window.location.href = "dashboard.php"; // Redirect to dashboard or any other page
+        };
+    </script>';
 } else {
     echo "Invalid invoice data.";
 }

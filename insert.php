@@ -4,18 +4,53 @@ include 'connection.php';
 
 // Check if form is submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Retrieve form inputs
     $product_name = $conn->real_escape_string($_POST['product_name']);
     $product_price = (float) $_POST['product_price'];
     $product_type = $conn->real_escape_string($_POST['product_type']);
+    
+    // Handle file upload
+    if (isset($_FILES['product_image']) && $_FILES['product_image']['error'] == 0) {
+        $file_tmp = $_FILES['product_image']['tmp_name'];
+        $file_name = basename($_FILES['product_image']['name']);
+        $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+        
+        // Set allowed file extensions
+        $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif'];
+        
+        // Validate file type
+        if (in_array($file_ext, $allowed_extensions)) {
+            // Define file upload directory
+            $upload_dir = 'uploads/';
+            // Create the upload directory if it doesn't exist
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0777, true);
+            }
 
-    // Prepare SQL statement
-    $sql = "INSERT INTO products (name, price, type) VALUES ('$product_name', '$product_price', '$product_type')";
+            // Create a unique file name
+            $unique_file_name = uniqid() . '.' . $file_ext;
+            $file_path = $upload_dir . $unique_file_name;
 
-    if ($conn->query($sql) === TRUE) {
-        echo "<p>New product added successfully!</p>";
-        echo "<p><a href='dashboard.php'>Go back to the main page</a></p>";
+            // Move the uploaded file to the server
+            if (move_uploaded_file($file_tmp, $file_path)) {
+                // Prepare SQL statement to insert product details and image path
+                $sql = "INSERT INTO products (name, price, type, image_path) VALUES ('$product_name', '$product_price', '$product_type', '$file_path')";
+                
+                if ($conn->query($sql) === TRUE) {
+                    // Redirect to button.php after successful insertion
+                    header("Location: button.php");
+                    exit(); // Ensure no further code is executed after redirection
+                } else {
+                    echo "<p>Error: " . $sql . "<br>" . $conn->error . "</p>";
+                }
+            } else {
+                echo "<p>Failed to upload image.</p>";
+            }
+        } else {
+            echo "<p>Invalid file type. Only JPG, JPEG, PNG, and GIF files are allowed.</p>";
+        }
     } else {
-        echo "<p>Error: " . $sql . "<br>" . $conn->error . "</p>";
+        echo "<p>No image uploaded or there was an error with the file upload.</p>";
     }
 }
 ?>
@@ -52,7 +87,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             font-weight: bold;
         }
         input[type="text"],
-        input[type="number"] {
+        input[type="number"],
+        input[type="file"] {
             width: 100%;
             padding: 8px;
             margin-bottom: 15px;
@@ -94,7 +130,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 <body>
     <h1>Add Product</h1>
-    <form action="" method="post">
+    <form action="" method="post" enctype="multipart/form-data">
         <label for="product_name">Product Name:</label>
         <input type="text" id="product_name" name="product_name" required>
         
@@ -112,6 +148,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <label for="beverage">Beverage</label>
             </div>
         </div>
+        
+        <label for="product_image">Product Image:</label>
+        <input type="file" id="product_image" name="product_image" required>
         
         <input type="submit" value="Add Product">
     </form>

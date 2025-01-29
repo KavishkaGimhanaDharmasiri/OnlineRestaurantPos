@@ -1,94 +1,6 @@
-<?php
-// Include Composer's autoloader for libraries like FPDF
-require 'vendor/autoload.php';
-
-use FPDF\FPDF;
-
-// Database connection
-include 'connection.php';
-
-// Handle AJAX request for processing invoice
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'processInvoice') {
-    $data = json_decode(file_get_contents('php://input'), true);
-
-    $billNo = $data['billNo'];
-    $items = $data['items'];
-    $totalAmount = $data['totalAmount'];
-
-    // Insert the invoice into the database
-    $stmt = $conn->prepare("INSERT INTO invoice (BillNo, TotalAmount) VALUES (?, ?)");
-    if (!$stmt) {
-        die(json_encode(['status' => 'error', 'message' => "Error preparing statement: " . $conn->error]));
-    }
-    $stmt->bind_param("id", $billNo, $totalAmount);
-
-    if ($stmt->execute()) {
-        // Insert invoice items
-        foreach ($items as $item) {
-            $stmt = $conn->prepare("INSERT INTO invoice_items (BillNo, ProductName, Price, Quantity) VALUES (?, ?, ?, ?)");
-            if (!$stmt) {
-                die(json_encode(['status' => 'error', 'message' => "Error preparing statement: " . $conn->error]));
-            }
-            $stmt->bind_param("isdi", $billNo, $item['name'], $item['price'], $item['quantity']);
-            $stmt->execute();
-        }
-        echo json_encode(['status' => 'success', 'message' => 'Invoice processed successfully!']);
-    } else {
-        echo json_encode(['status' => 'error', 'message' => "Error processing invoice: " . $stmt->error]);
-    }
-
-    $stmt->close();
-    $conn->close();
-    exit();
-}
-
-// Handle PDF generation
-if (isset($_GET['generate_pdf'])) {
-    // Get data from the URL
-    $billNo = $_GET['billNo'];
-    $invoiceData = json_decode(urldecode($_GET['data']), true);
-    $totalAmount = $_GET['totalAmount'];
-    $cash = $_GET['cash'];
-    $balance = $_GET['balance'];
-
-    // Create a new PDF instance
-    $pdf = new FPDF();
-    $pdf->AddPage();
-    $pdf->SetFont('Arial', 'B', 16);
-
-    // Add invoice details to the PDF
-    $pdf->Cell(40, 10, 'Bill No: ' . $billNo);
-    $pdf->Ln();
-    $pdf->Cell(40, 10, 'Invoice Details');
-    $pdf->Ln();
-
-    foreach ($invoiceData as $item) {
-        $pdf->Cell(40, 10, $item['name'] . ' - Rs: ' . $item['price'] . ' x ' . $item['quantity']);
-        $pdf->Ln();
-    }
-
-    $pdf->Cell(40, 10, 'Total Amount: Rs: ' . $totalAmount);
-    $pdf->Ln();
-    $pdf->Cell(40, 10, 'Cash: Rs: ' . $cash);
-    $pdf->Ln();
-    $pdf->Cell(40, 10, 'Balance: Rs: ' . $balance);
-
-    // Output the PDF
-    $pdf->Output('I', 'invoice.pdf'); // 'I' sends the PDF to the browser
-    exit();
-}
-
-// Fetch the last BillNo
-$lastBillNoResult = $conn->query("SELECT MAX(BillNo) AS lastBillNo FROM invoice");
-$lastBillNo = $lastBillNoResult->fetch_assoc()['lastBillNo'] + 1;
-
-// Fetch products
-$sql = "SELECT name, price, type FROM products ORDER BY type = 'food' DESC";
-$result = $conn->query($sql);
-?>
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -108,17 +20,32 @@ $result = $conn->query($sql);
         .product-card {
             transition: all 0.3s ease;
         }
+
         .product-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
-        @keyframes snowfall {
-            0% { transform: translateY(-100px); }
-            100% { transform: translateY(100vh); }
+
+        .product-image {
+            max-height: 150px;
+            object-fit: cover;
         }
     </style>
 </head>
+
 <body class="bg-gray-100 font-sans">
+    <?php
+    include 'connection.php';
+
+    // Fetch the last BillNo
+    $lastBillNoResult = $conn->query("SELECT MAX(BillNo) AS lastBillNo FROM invoice");
+    $lastBillNo = $lastBillNoResult->fetch_assoc()['lastBillNo'] + 1;
+
+    // Fetch products with image
+    $sql = "SELECT name, price, type, image_path FROM products ORDER BY type = 'food' DESC";
+    $result = $conn->query($sql);
+    ?>
+
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-4xl font-bold mb-8 text-center text-gray-800">Product List</h1>
 
@@ -129,6 +56,7 @@ $result = $conn->query($sql);
                     if ($result->num_rows > 0) {
                         while ($row = $result->fetch_assoc()) {
                             echo '<div class="product-card bg-white rounded-lg shadow-md p-6 flex flex-col justify-between">';
+                            echo '<img src="' . htmlspecialchars($row['image_path']) . '" alt="' . htmlspecialchars($row['name']) . '" class="product-image rounded-lg mb-4">';
                             echo '<h3 class="text-xl font-semibold mb-2">' . htmlspecialchars($row['name']) . '</h3>';
                             echo '<p class="text-gray-600 mb-2">Price: Rs:-' . htmlspecialchars(number_format($row['price'], 2)) . '</p>';
                             echo '<button onclick="addToTable(\'' . htmlspecialchars($row['name']) . '\', ' . htmlspecialchars($row['price']) . ')" class="bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition duration-300 ease-in-out">Add to Invoice</button>';
@@ -181,7 +109,7 @@ $result = $conn->query($sql);
 
     <script>
         let totalAmount = 0;
-        let products = {};  // This object will track the quantity of each product
+        let products = {}; // This object will track the quantity of each product
 
         function addToTable(name, price) {
             const tableBody = document.getElementById("productTable");
@@ -238,13 +166,13 @@ $result = $conn->query($sql);
             } else {
                 // If quantity is 1, remove the row completely
                 row.remove();
-                delete products[productName];  // Remove the product from the object
+                delete products[productName]; // Remove the product from the object
             }
 
             // Update the total amount
             totalAmount -= price;
             document.getElementById("totalAmount").textContent = "Rs:" + totalAmount.toFixed(2);
-            
+
             // Recalculate balance
             calculateBalance();
         }
@@ -256,58 +184,87 @@ $result = $conn->query($sql);
         }
 
         function processInvoice() {
-            const tableBody = document.getElementById("productTable");
-            const rows = Array.from(tableBody.rows);
-            const invoiceData = rows.map(row => ({
-                name: row.cells[0].textContent,
-                price: parseFloat(row.cells[1].textContent.replace('Rs:', '')),
-                quantity: parseInt(row.cells[2].textContent)
-            }));
+    const tableBody = document.getElementById("productTable");
+    const rows = Array.from(tableBody.rows);
+    const invoiceData = rows.map(row => ({
+        name: row.cells[0].textContent,
+        price: parseFloat(row.cells[1].textContent.replace('Rs:', '')),
+        quantity: parseInt(row.cells[2].textContent)
+    }));
 
-            const totalAmount = parseFloat(document.getElementById("totalAmount").textContent.replace('Rs:', ''));
-            const cash = parseFloat(document.getElementById("cash").value) || 0;
-            const billNo = document.getElementById("billNo").textContent;
+    const totalAmount = parseFloat(document.getElementById("totalAmount").textContent.replace('Rs:', ''));
+    const cash = parseFloat(document.getElementById("cash").value) || 0;
+    const billNo = document.getElementById("billNo").textContent;
 
-            const balance = cash - totalAmount;
-            if (balance < 0) {
-                alert("Check the entered amount: balance cannot be negative.");
-                return;
+    const balance = cash - totalAmount;
+    if (balance < 0) {
+        alert("Check the entered amount: balance cannot be negative.");
+        return;
+    }
+
+    // Generate PDF using jsPDF
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Add Bill Number
+    doc.text("Bill No: " + billNo, 10, 10);
+
+    // Add Invoice Table Headers
+    doc.text("Product", 10, 20);
+    doc.text("Price", 100, 20);
+    doc.text("Quantity", 140, 20);
+    doc.text("Total", 180, 20);
+
+    let yOffset = 30; // Starting y position for items
+
+    invoiceData.forEach(item => {
+        doc.text(item.name, 10, yOffset);
+        doc.text("Rs: " + item.price.toFixed(2), 100, yOffset);
+        doc.text(item.quantity.toString(), 140, yOffset);
+        doc.text("Rs: " + (item.price * item.quantity).toFixed(2), 180, yOffset);
+        yOffset += 10;
+    });
+
+    // Add Total Amount
+    doc.text("Total: Rs: " + totalAmount.toFixed(2), 10, yOffset + 10);
+    yOffset += 20;
+
+    // Add Cash and Balance Information
+    doc.text("Cash: Rs: " + cash.toFixed(2), 10, yOffset);
+    doc.text("Balance: Rs: " + balance.toFixed(2), 10, yOffset + 10);
+
+    // Auto print the PDF after it's created
+    doc.autoPrint(); // Automatically triggers print dialog
+    window.open(doc.output('bloburl'), '_blank'); // Open the generated PDF in a new window
+
+    // Process the invoice (you can adjust this as needed)
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "insert_invoice2.php", true);
+    xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                tableBody.innerHTML = '';
+                totalAmount = 0;
+                document.getElementById("totalAmount").textContent = "Rs:0.00";
+                document.getElementById("cash").value = '';
+                document.getElementById("balance").textContent = "Rs:0.00";
+                alert("Invoice processed successfully!");
+
+                // Redirect to the dashboard page after the invoice is processed
+                setTimeout(function() {
+                    window.location.replace("dashboard.php"); // Force redirection after a short delay
+                }, 1000); // Delay of 1 second before redirect
+            } else {
+                alert('Error processing invoice');
             }
-
-            // AJAX call to process the invoice
-            const xhr = new XMLHttpRequest();
-            xhr.open("POST", "", true);
-            xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
-                    console.log('Response Status: ' + xhr.status); // Check status code
-                    console.log('Response Text: ' . xhr.responseText); // Check the response text
-                    if (xhr.status === 200) {
-                        const response = JSON.parse(xhr.responseText);
-                        if (response.status === 'success') {
-                            tableBody.innerHTML = '';
-                            totalAmount = 0;
-                            document.getElementById("totalAmount").textContent = "Rs:0.00";
-                            document.getElementById("cash").value = '';
-                            document.getElementById("balance").textContent = "Rs:0.00";
-                            alert(response.message);
-
-                            // Redirect to the dashboard page after processing the invoice
-                            window.location.replace("dashboard.php"); // Force redirection
-
-                            // Open the PDF in a new tab
-                            const url = `?generate_pdf=true&billNo=${billNo}&data=${encodeURIComponent(JSON.stringify(invoiceData))}&totalAmount=${totalAmount}&cash=${cash}&balance=${balance}`;
-                            window.open(url, '_blank'); // Open in a new tab
-                        } else {
-                            alert(response.message);
-                        }
-                    } else {
-                        alert('Error processing invoice');
-                    }
-                }
-            };
-            xhr.send(JSON.stringify({ action: 'processInvoice', billNo: billNo, items: invoiceData, totalAmount: totalAmount }));
         }
+    };
+    xhr.send(JSON.stringify({ billNo: billNo, items: invoiceData, totalAmount: totalAmount }));
+}
+
+
     </script>
 </body>
+
 </html>

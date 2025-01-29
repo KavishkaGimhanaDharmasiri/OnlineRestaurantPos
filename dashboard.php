@@ -43,7 +43,13 @@
                         </a>
                     </li>
                     <li>
-                        <a href="f.php" class="flex items-center p-3 text-gray-700 hover:bg-blue-50 rounded-lg transition-colors">
+                        <a href=" view_product.php" class="flex items-center p-3 text-gray-700 hover:bg-blue-50 rounded-lg transition-colors">
+                            <i class="fa-duotone fa-solid fa-pen mr-3"></i>
+                            Edit Food/Beverage Price
+                        </a>
+                    </li>
+                    <li>
+                        <a href="j.php" class="flex items-center p-3 text-gray-700 hover:bg-blue-50 rounded-lg transition-colors">
                             <i class="fas fa-receipt mr-3"></i>
                             Bill
                         </a>

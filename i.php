@@ -1,3 +1,51 @@
+<?php
+// Database connection
+include 'connection.php';
+
+// Handle AJAX request for processing invoice
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'processInvoice') {
+    $data = json_decode(file_get_contents('php://input'), true);
+
+    $billNo = $data['billNo'];
+    $items = $data['items'];
+    $totalAmount = $data['totalAmount'];
+
+    // Insert the invoice into the database
+    $stmt = $conn->prepare("INSERT INTO invoice (BillNo, TotalAmount) VALUES (?, ?)");
+    if (!$stmt) {
+        die(json_encode(['status' => 'error', 'message' => "Error preparing statement: " . $conn->error]));
+    }
+    $stmt->bind_param("id", $billNo, $totalAmount);
+
+    if ($stmt->execute()) {
+        // Insert invoice items
+        foreach ($items as $item) {
+            $stmt = $conn->prepare("INSERT INTO invoice_items (BillNo, ProductName, Price) VALUES (?, ?, ?)");
+            if (!$stmt) {
+                die(json_encode(['status' => 'error', 'message' => "Error preparing statement: " . $conn->error]));
+            }
+            $stmt->bind_param("isd", $billNo, $item['name'], $item['price']);
+            $stmt->execute();
+        }
+        echo json_encode(['status' => 'success', 'message' => 'Invoice processed successfully!']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => "Error processing invoice: " . $stmt->error]);
+    }
+
+    $stmt->close();
+    $conn->close();
+    exit();
+}
+
+// Fetch the last BillNo
+$lastBillNoResult = $conn->query("SELECT MAX(BillNo) AS lastBillNo FROM invoice");
+$lastBillNo = $lastBillNoResult->fetch_assoc()['lastBillNo'] + 1;
+
+// Fetch products
+$sql = "SELECT name, price, type FROM products ORDER BY type = 'food' DESC";
+$result = $conn->query($sql);
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,10 +53,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Product List</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/snowfall/1.0.0/snowfall.min.js"></script>
-<div id="snowstorm"></div>
-
     <style>
         .product-card {
             transition: all 0.3s ease;
@@ -17,28 +61,9 @@
             transform: translateY(-5px);
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
-        @keyframes snowfall {
-  0% { transform: translateY(-100px); }
-  100% { transform: translateY(100vh); }
-}
-
-
-
     </style>
 </head>
 <body class="bg-gray-100 font-sans">
-    <?php
-    include 'connection.php';
-
-    // Fetch the last BillNo
-    $lastBillNoResult = $conn->query("SELECT MAX(BillNo) AS lastBillNo FROM invoice");
-    $lastBillNo = $lastBillNoResult->fetch_assoc()['lastBillNo'] + 1;
-
-    // Fetch products
-    $sql = "SELECT name, price, type FROM products ORDER BY type = 'food' DESC";
-    $result = $conn->query($sql);
-    ?>
-
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-4xl font-bold mb-8 text-center text-gray-800">Product List</h1>
 
@@ -131,55 +156,55 @@
             const balance = cash - totalAmount;
             document.getElementById("balance").textContent = "Rs:" + balance.toFixed(2);
         }
-        document.getElementById("processButton").addEventListener("click", processInvoice);
 
-function processInvoice() {
-    const tableBody = document.getElementById("productTable");
-    const rows = Array.from(tableBody.rows);
-    const invoiceData = rows.map(row => ({
-        name: row.cells[0].textContent,
-        price: parseFloat(row.cells[1].textContent.replace('Rs:', ''))
-    }));
+        function processInvoice() {
+            const tableBody = document.getElementById("productTable");
+            const rows = Array.from(tableBody.rows);
+            const invoiceData = rows.map(row => ({
+                name: row.cells[0].textContent,
+                price: parseFloat(row.cells[1].textContent.replace('Rs:', ''))
+            }));
 
-    const totalAmount = parseFloat(document.getElementById("totalAmount").textContent.replace('Rs:', ''));
-    const cash = parseFloat(document.getElementById("cash").value) || 0;
-    const billNo = document.getElementById("billNo").textContent;
+            const totalAmount = parseFloat(document.getElementById("totalAmount").textContent.replace('Rs:', ''));
+            const cash = parseFloat(document.getElementById("cash").value) || 0;
+            const billNo = document.getElementById("billNo").textContent;
 
-    const balance = cash - totalAmount;
-    if (balance < 0) {
-        alert("Check the entered amount: balance cannot be negative.");
-        return;
-    }
-
-    // AJAX call to process the invoice
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "insert_invoice2.php", true);
-    xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4) {
-            console.log('Response Status: ' + xhr.status); // Check status code
-            console.log('Response Text: ' + xhr.responseText); // Check the response text
-            if (xhr.status === 200) {
-                console.log(xhr.responseText); // Log the response if successful
-                tableBody.innerHTML = '';
-                totalAmount = 0;
-                document.getElementById("totalAmount").textContent = "Rs:0.00";
-                document.getElementById("cash").value = '';
-                document.getElementById("balance").textContent = "Rs:0.00";
-                alert("Invoice processed successfully!");
-
-                // Redirect to the dashboard page after processing the invoice
-                window.location.replace("dashboard.php"); // Force redirection
-            } else {
-                alert('Error processing invoice');
+            const balance = cash - totalAmount;
+            if (balance < 0) {
+                alert("Check the entered amount: balance cannot be negative.");
+                return;
             }
+
+            // AJAX call to process the invoice
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", "", true);
+            xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    console.log('Response Status: ' + xhr.status); // Check status code
+                    console.log('Response Text: ' + xhr.responseText); // Check the response text
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.status === 'success') {
+                            tableBody.innerHTML = '';
+                            totalAmount = 0;
+                            document.getElementById("totalAmount").textContent = "Rs:0.00";
+                            document.getElementById("cash").value = '';
+                            document.getElementById("balance").textContent = "Rs:0.00";
+                            alert(response.message);
+
+                            // Redirect to button3.php after successful processing
+                            window.location.href = "button3.php"; // Redirect to button3.php
+                        } else {
+                            alert(response.message);
+                        }
+                    } else {
+                        alert('Error processing invoice');
+                    }
+                }
+            };
+            xhr.send(JSON.stringify({ action: 'processInvoice', billNo: billNo, items: invoiceData, totalAmount: totalAmount }));
         }
-    };
-    xhr.send(JSON.stringify({ billNo: billNo, items: invoiceData, totalAmount: totalAmount }));
-}
-
-
-
     </script>
 </body>
 </html>
